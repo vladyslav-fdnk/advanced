@@ -36,7 +36,7 @@ def select_query(connection:sqlite3.Connection, query:str) -> list | None:
 
 
 if __name__=="__main__":
-    connection = create_connection('../database.db')
+    connection = create_connection('../experiments/database.db')
 
     create_users_table = """
     CREATE TABLE IF NOT EXISTS users (

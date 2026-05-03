@@ -4,8 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from selectolax.parser import HTMLParser
 
-from threads import queue
-
 
 def get_response(url: str) -> str:
     with requests.Session() as session:
