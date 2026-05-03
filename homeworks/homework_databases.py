@@ -2,7 +2,7 @@ import sqlite3
 from sqlite3 import Error
 
 import os
-print(os.path.abspath('northwind.db'))
+print(os.path.abspath('../experiments/northwind.db'))
 
 
 top_orders_n_countries_by_weight= """
@@ -159,7 +159,7 @@ def run_task(connection, title, query):
         print('-' * 80)
 
 if __name__ == "__main__":
-    connection = create_connection('../northwind.db')
+    connection = create_connection('../experiments/northwind.db')
 
     run_task(connection, "Task 1", top_orders_n_countries_by_weight)
     run_task(connection, "Task 2", clients_without_phone)
