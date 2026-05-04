@@ -46,3 +46,4 @@ if __name__ == '__main__':
     with ThreadPoolExecutor(max_workers=1) as executor:
         for _ in range(1):
             executor.submit(get_detail, queue)
+
