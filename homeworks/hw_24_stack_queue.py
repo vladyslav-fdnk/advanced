@@ -97,6 +97,7 @@ class Stack:   #task_3
 
         return found
 
+
 # stack = Stack()
 #
 # stack.items = [1, 2, 3, 4, 5]
