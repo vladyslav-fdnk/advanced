@@ -40,6 +40,7 @@ def get_detail(queue: Queue):
 
 
 if __name__ == '__main__':
+    workers= 8
     start = perf_counter()
 
     main_url = 'https://rozetka.pl/ua/laptopy-80004/c80004/'
@@ -50,13 +51,20 @@ if __name__ == '__main__':
     links = [link.attributes.get('href') for link in tree.css('.title-image-host') if link.attributes.get('href')]
     print(f'found {len(links)} links')
 
-    queue = Queue()
-    for item in links:
-        queue.put(item)
+    # queue = Queue()
+    # for item in links:
+    #     queue.put(item)
 
-    with requests.Session() as session:
+    urls_links_count = len(links)
+    chunks = round(urls_links_count / workers)
+    url_links = [links[i:i + workers] for i in range(0, len(links), chunks)]
+    print(url_links)
+
+
+
+
         with ProcessPoolExecutor(max_workers=4) as executor:
-            for _ in range(4):
-                executor.submit(get_detail, queue)
+            for links_list in url_links:
+                executor.submit(get_detail_processes, links_list)
 
     print(f'finished in {perf_counter() - start:.2f} seconds')
