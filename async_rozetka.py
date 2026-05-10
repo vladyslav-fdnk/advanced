@@ -10,6 +10,8 @@ from selectolax.parser import HTMLParser
 
 main_url= "https://rozetka.pl/ua/laptopy-80004/c80004/"
 
+sem = asyncio.Semaphore(5)
+
 
 def extract_id(url: str) -> str | None:
     match = re.search(r"(\d+)(?:/)?$", url)
@@ -23,6 +25,7 @@ CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY
 )
 """)
+table_created = False
 
 
 
@@ -37,7 +40,7 @@ async def worker(qu: asyncio.Queue, session: httpx.AsyncClient):
                 continue
 
 
-            print(f'working on {link}, queue size: {qu.qsize() if qu.qsize()>=0 else len(link)}')
+            print(f'working on {link}, queue size: {qu.qsize()}')
             print(f'extract id {product_id}')
 
             api_url = "https://common-api.rozetka.pl/v1/api/product/details"
@@ -47,11 +50,12 @@ async def worker(qu: asyncio.Queue, session: httpx.AsyncClient):
                 "ids": product_id
             }
 
-            api_response = await session.get(
-                api_url,
-                params=params,
-                timeout=10
-            )
+            async with sem:
+                api_response = await session.get(
+                    api_url,
+                    params=params,
+                    timeout=10
+                )
 
             api_response.raise_for_status()
 
@@ -59,13 +63,18 @@ async def worker(qu: asyncio.Queue, session: httpx.AsyncClient):
 
             if not data.get("data"):
                 print(f'No data for {product_id}')
-                qu.task_done()
                 continue
 
             item = data["data"][0]
+
+            global table_created
+
+            columns = ['id INTEGER PRIMARY KEY']
+
             for key, value in item.items():
-                if isinstance(value, (dict, list)):
-                    value = json.dumps(value, ensure_ascii=False)
+
+                if key == "id":
+                    continue
 
                 column_type = "TEXT"
 
@@ -75,22 +84,42 @@ async def worker(qu: asyncio.Queue, session: httpx.AsyncClient):
                 elif isinstance(value, float):
                     column_type = "REAL"
 
-                try:
-                    cursor.execute(
-                        f'ALTER TABLE products ADD COLUMN "{key}" {column_type}'
-                    )
-                except sqlite3.OperationalError:
-                    pass
+                columns.append(f'"{key}" {column_type}')
 
-            json_data = json.dumps(item, ensure_ascii=False)
+            create_sql = f'''
+            CREATE TABLE IF NOT EXISTS products (
+                {", ".join(columns)}
+            )
+            '''
 
-            cursor.execute("""
-            INSERT OR REPLACE INTO products (id, json)
-            VALUES (?, ?)
-            """, (
-                int(product_id),
-                json_data
-            ))
+            if not table_created:
+                cursor.execute(create_sql)
+                table_created = True
+
+
+            columns = []
+            placeholders = []
+            values = []
+
+            for key, value in item.items():
+
+                if isinstance(value, (dict, list)):
+                    value = json.dumps(value, ensure_ascii=False)
+
+                columns.append(f'"{key}"')
+                placeholders.append('?')
+                values.append(value)
+
+            sql = f'''
+            INSERT OR REPLACE INTO products (
+                {", ".join(columns)}
+            )
+            VALUES (
+                {", ".join(placeholders)}
+            )
+            '''
+
+            cursor.execute(sql, values)
 
             conn.commit()
 
@@ -107,22 +136,22 @@ async def worker(qu: asyncio.Queue, session: httpx.AsyncClient):
 
 
 
-def get_product(product_id: int) -> dict:
-    url = "https://common-api.rozetka.pl/v1/api/product/details"
+# def get_product(product_id: int) -> dict:
+#     url = "https://common-api.rozetka.pl/v1/api/product/details"
 
-    params = {
-        "country": "PL",
-        "lang": "ua",
-        "ids": product_id
-    }
-    response = httpx.get(
-        url,
-        params=params,
-        timeout=30
-    )
-    response.raise_for_status()
+#     params = {
+#         "country": "PL",
+#         "lang": "ua",
+#         "ids": product_id
+#     }
+#     response = httpx.get(
+#         url,
+#         params=params,
+#         timeout=30
+#     )
+#     response.raise_for_status()
 
-    return response.json()
+#     return response.json()
 
 
 
@@ -168,7 +197,7 @@ async def main():
     for task in tasks:
         task.cancel()
 
-    await asyncio.gather(*tasks)
+    await asyncio.gather(*tasks, return_exceptions=True)
 
     await session.aclose()
 
